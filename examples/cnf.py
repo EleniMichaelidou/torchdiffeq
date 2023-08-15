@@ -172,10 +172,12 @@ if __name__ == '__main__':
                 os.makedirs(results_dir)
 
         for run in range(repetitions):
-	    average_loss_list = []  # Add this line before the training loop
+            print("Noise Level", noise_level)
+            print("Num Samples", num_samples)
+            print("Run", run)
+	        average_loss_list = []  # Add this line before the training loop
             current_loss_list = []
-
-            print("noise = ", noise_level) # model
+		
             func = CNF(in_out_dim=2, hidden_dim=args.hidden_dim, width=args.width).to(device)
             optimizer = optim.Adam(func.parameters(), lr=args.lr)
             p_z0 = torch.distributions.MultivariateNormal(
