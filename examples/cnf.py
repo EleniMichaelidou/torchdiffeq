@@ -7,7 +7,7 @@ import matplotlib
 
 matplotlib.use('agg')
 import matplotlib.pyplot as plt
-from sklearn.datasets import make_circles
+from sklearn.datasets import make_circles, make_moons
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -138,7 +138,7 @@ class RunningAverageMeter(object):
 
 
 def get_batch(_num_samples, _noise_level):
-    _points, _ = make_circles(n_samples=_num_samples, noise=_noise_level, factor=0.5)
+    _points, _ = make_moons(n_samples=_num_samples, noise=_noise_level)
     _x = torch.tensor(_points).type(torch.float32).to(device)
     _logp_diff_t1 = torch.zeros(_num_samples, 1).type(torch.float32).to(device)
 
@@ -167,7 +167,7 @@ if __name__ == '__main__':
 
         if args.viz:
             # Create a unique results directory for each run
-            results_dir = f"./results_{noise_level}_{num_samples}"
+            results_dir = f"./results_moons_{noise_level}_{num_samples}"
             if not os.path.exists(results_dir):
                 os.makedirs(results_dir)
 
@@ -253,8 +253,8 @@ if __name__ == '__main__':
                     )
 
                     # Generate evolution of density
-                    x = np.linspace(-1.5, 1.5, 100)
-                    y = np.linspace(-1.5, 1.5, 100)
+                    x = np.linspace(-1.5, 2.5, 100)
+                    y = np.linspace(-1.0, 1.5, 100)
                     points = np.vstack(np.meshgrid(x, y)).reshape([2, -1]).T
 
                     z_t1 = torch.tensor(points).type(torch.float32).to(device)
@@ -294,10 +294,10 @@ if __name__ == '__main__':
                         ax3.get_yaxis().set_ticks([])
 
                         ax1.hist2d(*target_sample.detach().cpu().numpy().T, bins=300, density=True,
-                                   range=[[-1.5, 1.5], [-1.5, 1.5]])
+                                   range=[[-1.5, 2.5], [-1.0, 1.5]])
 
                         ax2.hist2d(*z_sample.detach().cpu().numpy().T, bins=300, density=True,
-                                   range=[[-1.5, 1.5], [-1.5, 1.5]])
+                                   range=[[-1.5, 2.5], [-1.0, 1.5]])
 
                         logp = p_z0.log_prob(z_density) - logp_diff.view(-1)
                         ax3.tricontourf(*z_t1.detach().cpu().numpy().T,
