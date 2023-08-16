@@ -4,14 +4,15 @@ import glob
 from PIL import Image
 import numpy as np
 import matplotlib
-
-matplotlib.use('agg')
-import matplotlib.pyplot as plt
-from sklearn.datasets import make_circles, make_moons
 import torch
 import torch.nn as nn
 import torch.optim as optim
 import pandas as pd
+import matplotlib.pyplot as plt
+from sklearn.datasets import make_circles, make_moons
+import itertools
+
+matplotlib.use('agg')
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--adjoint', action='store_true')
@@ -145,8 +146,6 @@ def get_batch(_num_samples, _noise_level):
     return _x, _logp_diff_t1
 
 
-import itertools
-
 if __name__ == '__main__':
 
     device = torch.device(
@@ -175,9 +174,9 @@ if __name__ == '__main__':
             print("Noise Level", noise_level)
             print("Num Samples", num_samples)
             print("Run", run)
-	    average_loss_list = []  # Add this line before the training loop
+            average_loss_list = []
             current_loss_list = []
-		
+
             func = CNF(in_out_dim=2, hidden_dim=args.hidden_dim, width=args.width).to(device)
             optimizer = optim.Adam(func.parameters(), lr=args.lr)
             p_z0 = torch.distributions.MultivariateNormal(
@@ -354,3 +353,4 @@ if __name__ == '__main__':
             print(
                 f'Saved loss values at {os.path.join(results_dir, f"loss_data_{noise_level}_{num_samples}.xlsx")}'
             )
+            
