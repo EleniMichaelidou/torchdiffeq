@@ -153,7 +153,7 @@ if __name__ == '__main__':
     )
 
     # Define a list of noise levels and sample sizes you want to iterate over
-    noise_levels = [0, 0.01, 0.05, 0.1]  # Example noise levels
+    noise_levels = [0.05, 0.1]  # Example noise levels
     num_samples_list = [64, 128, 256, 512, 1024]  # Example sample sizes
 
     repetitions = 10
@@ -161,6 +161,8 @@ if __name__ == '__main__':
     t0 = 0
     t1 = 10
     for noise_level, num_samples in itertools.product(noise_levels, num_samples_list):
+        if noise_level == 0.05 and not num_samples == 1024:
+            continue
 
         run_dataframes = []
 
