@@ -153,7 +153,7 @@ if __name__ == '__main__':
     )
 
     # Define a list of noise levels and sample sizes you want to iterate over
-    noise_levels = [0.05, 0.1]  # Example noise levels
+    noise_levels = [0.02]  # Example noise levels
     num_samples_list = [64, 128, 256, 512, 1024]  # Example sample sizes
 
     repetitions = 10
@@ -161,8 +161,6 @@ if __name__ == '__main__':
     t0 = 0
     t1 = 10
     for noise_level, num_samples in itertools.product(noise_levels, num_samples_list):
-        if noise_level == 0.05 and not num_samples == 1024:
-            continue
 
         run_dataframes = []
 
@@ -326,33 +324,19 @@ if __name__ == '__main__':
             run_loss_df = pd.DataFrame({'Average Loss': average_loss_list, 'Current Loss': current_loss_list})
             run_dataframes.append(run_loss_df)  # Store the DataFrame for this run
 
-            # # After the training loop
-            # plt.figure()
-            # plt.plot(average_loss_list, label='Average Loss')
-            # plt.plot(current_loss_list, label='Current Loss', alpha=0.5)
-            # plt.xlabel('Iteration')
-            # plt.ylabel('Loss')
-            # plt.title(f'Loss during training (noise level: {noise_level}, num samples: {num_samples})')
-            # plt.legend()
-            # plt.savefig(os.path.join(results_dir, f'loss_plot_{noise_level}_{num_samples}.png'))
-            #
-            # print(
-            #     f'Saved loss plot at {os.path.join(results_dir, f"loss_plot_{noise_level}_{num_samples}.png")}'
-            # )
+        # Calculate the average across runs and create a new DataFrame for it
+        average_loss_df = pd.concat(run_dataframes).groupby(level=0).mean()
 
-            # Calculate the average across runs and create a new DataFrame for it
-            average_loss_df = pd.concat(run_dataframes).groupby(level=0).mean()
+        # Create a Pandas Excel writer using XlsxWriter engine
+        with pd.ExcelWriter(os.path.join(results_dir, f'loss_data_{noise_level}_{num_samples}.xlsx'),
+                            engine='xlsxwriter') as excel_writer:
+            # Save each run DataFrame to a separate sheet
+            for idx, run_df in enumerate(run_dataframes):
+                run_df.to_excel(excel_writer, sheet_name=f'Run{idx + 1}', index=False)
 
-            # Create a Pandas Excel writer using XlsxWriter engine
-            with pd.ExcelWriter(os.path.join(results_dir, f'loss_data_{noise_level}_{num_samples}.xlsx'),
-                                engine='xlsxwriter') as excel_writer:
-                # Save each run DataFrame to a separate sheet
-                for idx, run_df in enumerate(run_dataframes):
-                    run_df.to_excel(excel_writer, sheet_name=f'Run{idx + 1}', index=False)
+            average_loss_df.to_excel(excel_writer, sheet_name='Average', index=False)
 
-                average_loss_df.to_excel(excel_writer, sheet_name='Average', index=False)
-
-            print(
-                f'Saved loss values at {os.path.join(results_dir, f"loss_data_{noise_level}_{num_samples}.xlsx")}'
-            )
+        print(
+            f'Saved loss values at {os.path.join(results_dir, f"loss_data_{noise_level}_{num_samples}.xlsx")}'
+        )
             
