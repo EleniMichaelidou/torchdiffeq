@@ -1,15 +1,13 @@
 import os
 import argparse
-import glob
 import torch
 import torch.nn as nn
 import torch.optim as optim
 import pandas as pd
-from PIL import Image
 import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
-from sklearn.datasets import make_moons
+from sklearn.datasets import make_circles
 
 matplotlib.use('agg')
 
@@ -139,7 +137,7 @@ class RunningAverageMeter(object):
 
 
 def get_batch(num_samples):
-    _points, _ = make_moons(n_samples=num_samples, noise=0.06)
+    _points, _ = make_circles(n_samples=num_samples, noise=0.06, factor=0.5)
     _x = torch.tensor(_points).type(torch.float32).to(device)
     _logp_diff_t1 = torch.zeros(num_samples, 1).type(torch.float32).to(device)
 
@@ -147,7 +145,7 @@ def get_batch(num_samples):
 
 
 def generate_test_samples(num_testing_samples):
-    test_points, _ = make_moons(n_samples=num_testing_samples, noise=0.06)
+    test_points, _ = make_circles(n_samples=num_testing_samples, noise=0.06, factor=0.5)
     x_test = torch.tensor(test_points).type(torch.float32).to(device)
     _logp_diff_t1_testing = torch.zeros(num_testing_samples, 1).type(torch.float32).to(device)
 
@@ -175,7 +173,7 @@ if __name__ == '__main__':
 
         if args.viz:
             # Create a unique results directory for each run
-            results_dir = f"./results_moons_{width}"
+            results_dir = f"./results_circles_{width}"
             if not os.path.exists(results_dir):
                 os.makedirs(results_dir)
 
@@ -263,8 +261,8 @@ if __name__ == '__main__':
                     )
 
                     # Generate evolution of density
-                    x = np.linspace(-1.5, 2.5, 100)
-                    y = np.linspace(-1.0, 1.5, 100)
+                    x = np.linspace(-1.5, 1.5, 100)
+                    y = np.linspace(-1.5, 1.5, 100)
                     points = np.vstack(np.meshgrid(x, y)).reshape([2, -1]).T
 
                     z_t1 = torch.tensor(points).type(torch.float32).to(device)
@@ -309,7 +307,7 @@ if __name__ == '__main__':
                     plt.margins(0, 0)
                     plt.title(f"{width}", fontsize=36)
                     plt.hist2d(*z_sample.detach().cpu().numpy().T, bins=300, density=True,
-                               range=[[-1.5, 2.5], [-1.0, 1.5]])
+                               range=[[-1.5, 1.5], [-1.5, 1.5]])
 
                     plt.savefig(os.path.join(results_dir, f"sample_width_{width}-{int(t * 1000):05d}.jpg"),
                                 pad_inches=0.0, bbox_inches='tight')
@@ -368,7 +366,7 @@ if __name__ == '__main__':
 
         if args.viz:
             # Create a unique results directory for each run
-            results_dir = f"./results_moons_hidden_{hidden_dim}"
+            results_dir = f"./results_circles_hidden_{hidden_dim}"
             if not os.path.exists(results_dir):
                 os.makedirs(results_dir)
 
@@ -455,8 +453,8 @@ if __name__ == '__main__':
                     )
 
                     # Generate evolution of density
-                    x = np.linspace(-1.5, 2.5, 100)
-                    y = np.linspace(-1.0, 1.5, 100)
+                    x = np.linspace(-1.5, 1.5, 100)
+                    y = np.linspace(-1.5, 1.5, 100)
                     points = np.vstack(np.meshgrid(x, y)).reshape([2, -1]).T
 
                     z_t1 = torch.tensor(points).type(torch.float32).to(device)
@@ -502,7 +500,7 @@ if __name__ == '__main__':
                     plt.margins(0, 0)
                     plt.title(f"{hidden_dim}", fontsize=36)
                     plt.hist2d(*z_sample.detach().cpu().numpy().T, bins=300, density=True,
-                               range=[[-1.5, 2.5], [-1.0, 1.5]])
+                               range=[[-1.5, 1.5], [-1.5, 1.5]])
 
                     plt.savefig(os.path.join(results_dir, f"sample_hidden_{hidden_dim}-{int(t * 1000):05d}.jpg"),
                                 pad_inches=0.0, bbox_inches='tight')
@@ -551,7 +549,7 @@ if __name__ == '__main__':
     plt.imshow(merged_sample_width_plot)
     plt.axis('off')
     # Save the merged plot as a PDF
-    plt.savefig('merged_sample_width_plot.pdf', bbox_inches='tight', pad_inches=0)
+    plt.savefig('merged_sample_width_plot_circles.pdf', bbox_inches='tight', pad_inches=0)
 
     plt.close()
 
@@ -562,7 +560,7 @@ if __name__ == '__main__':
     plt.imshow(merged_log_width_plot)
     plt.axis('off')
     # Save the merged plot as a PDF
-    plt.savefig('merged_log_width_plot.pdf', bbox_inches='tight', pad_inches=0)
+    plt.savefig('merged_log_width_plot_circles.pdf', bbox_inches='tight', pad_inches=0)
 
     plt.close()
 
@@ -574,7 +572,7 @@ if __name__ == '__main__':
     plt.imshow(merged_sample_hidden_plot)
     plt.axis('off')
     # Save the merged plot as a PDF
-    plt.savefig('merged_sample_hidden_plot.pdf', bbox_inches='tight', pad_inches=0)
+    plt.savefig('merged_sample_hidden_plot_circles.pdf', bbox_inches='tight', pad_inches=0)
 
     plt.close()
 
@@ -585,6 +583,6 @@ if __name__ == '__main__':
     plt.imshow(merged_log_hidden_plot)
     plt.axis('off')
     # Save the merged plot as a PDF
-    plt.savefig('merged_log_hidden_plot.pdf', bbox_inches='tight', pad_inches=0)
+    plt.savefig('merged_log_hidden_plot_circles.pdf', bbox_inches='tight', pad_inches=0)
 
     plt.close()
