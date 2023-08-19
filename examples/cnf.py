@@ -162,7 +162,7 @@ if __name__ == '__main__':
 
     # Define a list of noise levels and sample sizes you want to iterate over
     noise_levels = [0.02]  # Example noise levels
-    num_samples_list = [64, 128, 256, 512, 1024]  # Example sample sizes
+    num_samples_list = [1024]  # Example sample sizes
 
     repetitions = 10
 
