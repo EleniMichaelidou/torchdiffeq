@@ -7,11 +7,18 @@ import torch.nn as nn
 import torch.optim as optim
 import pandas as pd
 import matplotlib.pyplot as plt
-from matplotlib import gridspec
 from sklearn.datasets import make_circles
 import itertools
 
 matplotlib.use('agg')
+
+# Set random seeds for reproducibility
+seed = 42
+np.random.seed(seed)
+torch.manual_seed(seed)
+if torch.cuda.is_available():
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--adjoint', action='store_true')
@@ -152,194 +159,6 @@ if __name__ == '__main__':
     )
 
     # Define a list of noise levels and sample sizes you want to iterate over
-    noise_levels = [0.05]  # Example noise levels
-    num_samples_list = [64, 128, 256, 512, 1024]  # Example sample sizes
-
-    repetitions = 1
-
-    t0 = 0
-    t1 = 10
-
-    plots_samples = []
-
-    for noise_level, num_samples in itertools.product(noise_levels, num_samples_list):
-
-        run_dataframes = []
-
-        if args.viz:
-            # Create a unique results directory for each run
-            results_dir = f"./results_dif_samples_{noise_level}_{num_samples}"
-            if not os.path.exists(results_dir):
-                os.makedirs(results_dir)
-
-        for run in range(repetitions):
-            print("Noise Level", noise_level)
-            print("Num Samples", num_samples)
-            print("Run", run)
-            average_loss_list = []
-            current_loss_list = []
-
-            func = CNF(in_out_dim=2, hidden_dim=args.hidden_dim, width=args.width).to(device)
-            optimizer = optim.Adam(func.parameters(), lr=args.lr)
-            p_z0 = torch.distributions.MultivariateNormal(
-                loc=torch.tensor([0.0, 0.0]).to(device),
-                covariance_matrix=torch.tensor([[0.1, 0.0], [0.0, 0.1]]).to(device)
-            )
-            loss_meter = RunningAverageMeter()
-
-            if args.train_dir is not None:
-                if not os.path.exists(args.train_dir):
-                    os.makedirs(args.train_dir)
-                ckpt_path = os.path.join(args.train_dir, 'ckpt.pth')
-                if os.path.exists(ckpt_path):
-                    checkpoint = torch.load(ckpt_path)
-                    func.load_state_dict(checkpoint['func_state_dict'])
-                    optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-                    print(f'Loaded ckpt from {ckpt_path}')
-
-            try:
-                for itr in range(1, args.niters + 1):
-                    optimizer.zero_grad()
-
-                    x, logp_diff_t1 = get_batch_circles(num_samples, noise_level)
-
-                    z_t, logp_diff_t = odeint(
-                        func,
-                        (x, logp_diff_t1),
-                        torch.tensor([t1, t0]).type(torch.float32).to(device),
-                        atol=1e-5,
-                        rtol=1e-5,
-                        method='dopri5',
-                    )
-
-                    z_t0, logp_diff_t0 = z_t[-1], logp_diff_t[-1]
-
-                    logp_x = p_z0.log_prob(z_t0).to(device) - logp_diff_t0.view(-1)
-                    loss = -logp_x.mean(0)
-
-                    loss.backward()
-                    optimizer.step()
-
-                    loss_meter.update(loss.item())
-                    average_loss_list.append(loss_meter.avg)  # Add this line to store the loss value
-                    current_loss_list.append(loss.item())
-
-                    print('Iter: {}, running avg loss: {:.4f}'.format(itr, loss_meter.avg))
-
-            except KeyboardInterrupt:
-                if args.train_dir is not None:
-                    ckpt_path = os.path.join(args.train_dir, 'ckpt.pth')
-                    torch.save({
-                        'func_state_dict': func.state_dict(),
-                        'optimizer_state_dict': optimizer.state_dict(),
-                    }, ckpt_path)
-                    print(f'Stored ckpt at {ckpt_path}')
-            print(f'Training complete after {itr} iters.')
-
-            if args.viz and run == repetitions - 1:
-                viz_samples = 30000
-                viz_timesteps = 41
-                target_sample, _ = get_batch_circles(viz_samples, noise_level)
-
-                with torch.no_grad():
-                    # Generate evolution of samples
-                    z_t0 = p_z0.sample([viz_samples]).to(device)
-                    logp_diff_t0 = torch.zeros(viz_samples, 1).type(torch.float32).to(device)
-
-                    z_t_samples, _ = odeint(
-                        func,
-                        (z_t0, logp_diff_t0),
-                        torch.tensor(np.linspace(t0, t1, viz_timesteps)).to(device),
-                        atol=1e-5,
-                        rtol=1e-5,
-                        method='dopri5',
-                    )
-
-                    # Generate evolution of density
-                    x = np.linspace(-1.5, 1.5, 100)
-                    y = np.linspace(-1.5, 1.5, 100)
-                    points = np.vstack(np.meshgrid(x, y)).reshape([2, -1]).T
-
-                    z_t1 = torch.tensor(points).type(torch.float32).to(device)
-                    logp_diff_t1 = torch.zeros(z_t1.shape[0], 1).type(torch.float32).to(device)
-
-                    z_t_density, logp_diff_t = odeint(
-                        func,
-                        (z_t1, logp_diff_t1),
-                        torch.tensor(np.linspace(t1, t0, viz_timesteps)).to(device),
-                        atol=1e-5,
-                        rtol=1e-5,
-                        method='dopri5',
-                    )
-
-                    t = np.linspace(t0, t1, viz_timesteps)[-1]
-                    z_sample = z_t_samples[-1]
-                    z_density = z_t_density[-1]
-                    logp_diff = logp_diff_t[-1]
-
-                    plt.figure(figsize=(4, 4), dpi=200)
-                    plt.tight_layout()
-                    plt.subplots_adjust(left=0.05, right=0.95)  # Minimize left and right margins
-                    plt.axis('off')
-                    plt.margins(0, 0)
-                    plt.title(f"{num_samples}", fontsize=30, y=1.01)
-                    logp = p_z0.log_prob(z_density) - logp_diff.view(-1)
-                    plt.tricontourf(*z_t1.detach().cpu().numpy().T,
-                                    np.exp(logp.detach().cpu().numpy()), 200)
-
-                    plt.savefig(os.path.join(results_dir, f"log_dif_samples_{num_samples}-{int(t * 1000):05d}.jpg"),
-                                pad_inches=0.0, bbox_inches='tight')
-                    plots_samples.append(plt.gcf())
-                    plt.close()
-
-                    if num_samples == 1024:
-                        plt.figure(figsize=(4, 4), dpi=200)
-                        plt.tight_layout()
-                        plt.subplots_adjust(left=0.05, right=0.95)  # Minimize left and right margins
-                        plt.axis('off')
-                        plt.margins(0, 0)
-                        plt.title("target", fontsize=30, y=1.01)
-                        plt.hist2d(*target_sample.detach().cpu().numpy().T, bins=300, density=True,
-                                   range=[[-1.5, 1.5], [-1.5, 1.5]])
-
-                        plt.savefig(os.path.join(results_dir, f"targ_dif_samples_{num_samples}-{int(t * 1000):05d}.jpg"),
-                                    pad_inches=0.0, bbox_inches='tight')
-
-                        plots_samples.append(plt.gcf())
-                        plt.close()
-
-            run_loss_df = pd.DataFrame({'Average Loss': average_loss_list, 'Current Loss': current_loss_list})
-            run_dataframes.append(run_loss_df)  # Store the DataFrame for this run
-
-        # Calculate the average across runs and create a new DataFrame for it
-        average_loss_df = pd.concat(run_dataframes).groupby(level=0).mean()
-
-        # Create a Pandas Excel writer using XlsxWriter engine
-        with pd.ExcelWriter(os.path.join(results_dir, f'loss_data_{noise_level}_{num_samples}.xlsx'),
-                            engine='xlsxwriter') as excel_writer:
-            # Save each run DataFrame to a separate sheet
-            for idx, run_df in enumerate(run_dataframes):
-                run_df.to_excel(excel_writer, sheet_name=f'Run{idx + 1}', index=False)
-
-            average_loss_df.to_excel(excel_writer, sheet_name='Average', index=False)
-
-        print(
-            f'Saved loss values at {os.path.join(results_dir, f"loss_data_{noise_level}_{num_samples}.xlsx")}'
-        )
-
-    merged_dif_samples_plot = np.hstack(
-        [np.array(plot.canvas.renderer.buffer_rgba()) for plot in plots_samples])
-
-    # Create a new figure for saving the merged plot
-    plt.figure(figsize=(24, 4))
-    plt.imshow(merged_dif_samples_plot)
-    plt.axis('off')
-    # Save the merged plot as a PDF
-    plt.savefig('merged_dif_samples_plot_0.05.pdf', bbox_inches='tight', pad_inches=0)
-
-    plt.close()
-
-    # Define a list of noise levels and sample sizes you want to iterate over
     noise_levels = [0, 0.01, 0.05, 0.1]  # Example noise levels
     num_samples_list = [512]  # Example sample sizes
 
@@ -350,13 +169,15 @@ if __name__ == '__main__':
 
     plots_noise = []
 
+    # target_plots = []
+
     for noise_level, num_samples in itertools.product(noise_levels, num_samples_list):
 
         run_dataframes = []
 
         if args.viz:
             # Create a unique results directory for each run
-            results_dir = f"./results_noises_{noise_level}_{num_samples}"
+            results_dir = f"./results_noises_itr_{noise_level}_{num_samples}"
             if not os.path.exists(results_dir):
                 os.makedirs(results_dir)
 
@@ -465,26 +286,18 @@ if __name__ == '__main__':
                     z_density = z_t_density[-1]
                     logp_diff = logp_diff_t[-1]
 
-                    plt.figure(figsize=(4, 10), dpi=200)
-                    gs = gridspec.GridSpec(2, 1, height_ratios=[1, 1])
+                    plt.figure(figsize=(4, 4.5), dpi=200)
                     plt.tight_layout()
                     plt.subplots_adjust(left=0.05, right=0.95)  # Minimize left and right margins
                     plt.axis('off')
                     plt.margins(0, 0)
-                    ax1 = plt.subplot(gs[1])
-                    ax1.get_xaxis().set_ticks([])
-                    ax1.get_yaxis().set_ticks([])
-                    ax2 = plt.subplot(gs[0])
-                    title = ax2.set_title(f"{(noise_level*100):.0f}%", fontsize=28)
+                    title = plt.title(f"{(noise_level*100):.1f}%", fontsize=28)
                     title.set_position([0.5, 1.01])
-                    ax2.get_xaxis().set_ticks([])
-                    ax2.get_yaxis().set_ticks([])
+                    plt.xticks([])
+                    plt.yticks([])
                     logp = p_z0.log_prob(z_density) - logp_diff.view(-1)
-                    ax1.tricontourf(*z_t1.detach().cpu().numpy().T,
+                    plt.tricontourf(*z_t1.detach().cpu().numpy().T,
                                     np.exp(logp.detach().cpu().numpy()), 200)
-
-                    ax2.hist2d(*target_sample.detach().cpu().numpy().T, bins=300, density=True,
-                               range=[[-1.5, 1.5], [-1.5, 1.5]])
 
                     plt.savefig(
                         os.path.join(results_dir, f"noise_levels_{noise_level}-{int(t * 1000):05d}.jpg"),
@@ -492,6 +305,26 @@ if __name__ == '__main__':
 
                     plots_noise.append(plt.gcf())
                     plt.close()
+
+                    # plt.figure(figsize=(4, 4.5), dpi=200)
+                    # plt.tight_layout()
+                    # plt.subplots_adjust(left=0.05, right=0.95)  # Minimize left and right margins
+                    # plt.axis('off')
+                    # plt.margins(0, 0)
+                    # title = plt.title(f"{(noise_level * 100):.0f}%", fontsize=28)
+                    # title.set_position([0.5, 1.01])
+                    # plt.xticks([])
+                    # plt.yticks([])
+                    # plt.hist2d(*target_sample.detach().cpu().numpy().T, bins=300, density=True,
+                    #            range=[[-1.5, 1.5], [-1.5, 1.5]])
+                    #
+                    # plt.savefig(
+                    #     os.path.join(results_dir, f"noise_levels_{noise_level}-{int(t * 1000):05d}.jpg"),
+                    #     pad_inches=0.0, bbox_inches='tight')
+                    #
+                    # target_plots.append(plt.gcf())
+                    # plt.close()
+
 
             run_loss_df = pd.DataFrame({'Average Loss': average_loss_list, 'Current Loss': current_loss_list})
             run_dataframes.append(run_loss_df)  # Store the DataFrame for this run
@@ -516,10 +349,22 @@ if __name__ == '__main__':
         [np.array(plot.canvas.renderer.buffer_rgba()) for plot in plots_noise])
 
     # Create a new figure for saving the merged plot
-    plt.figure(figsize=(16, 10))
+    plt.figure(figsize=(16, 4.5))
     plt.imshow(merged_noises_plot)
     plt.axis('off')
     # Save the merged plot as a PDF
-    plt.savefig('merged_noises_plot.pdf', bbox_inches='tight', pad_inches=0)
+    plt.savefig('merged_noises_plot_1000.pdf', bbox_inches='tight', pad_inches=0)
 
     plt.close()
+
+    # merge_target_plots = np.hstack(
+    #     [np.array(plot.canvas.renderer.buffer_rgba()) for plot in target_plots])
+    #
+    # # Create a new figure for saving the merged plot
+    # plt.figure(figsize=(16, 4.5))
+    # plt.imshow(merge_target_plots)
+    # plt.axis('off')
+    # # Save the merged plot as a PDF
+    # plt.savefig('merge_target_plots.pdf', bbox_inches='tight', pad_inches=0)
+    #
+    # plt.close()
