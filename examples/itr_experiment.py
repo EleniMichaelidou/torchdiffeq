@@ -23,7 +23,7 @@ if torch.cuda.is_available():
 parser = argparse.ArgumentParser()
 parser.add_argument('--adjoint', action='store_true')
 parser.add_argument('--viz', action='store_true')
-parser.add_argument('--niters', type=int, default=2000)
+parser.add_argument('--niters', type=int, default=3000)
 parser.add_argument('--lr', type=float, default=1e-3)
 parser.add_argument('--_num_samples', type=int, default=512)
 parser.add_argument('--width', type=int, default=64)
@@ -177,7 +177,7 @@ if __name__ == '__main__':
 
         if args.viz:
             # Create a unique results directory for each run
-            results_dir = f"./results_noises_itr_2{noise_level}_{num_samples}"
+            results_dir = f"./results_noises_itr_3{noise_level}_{num_samples}"
             if not os.path.exists(results_dir):
                 os.makedirs(results_dir)
 
@@ -291,7 +291,7 @@ if __name__ == '__main__':
                     plt.subplots_adjust(left=0.05, right=0.95)  # Minimize left and right margins
                     plt.axis('off')
                     plt.margins(0, 0)
-                    title = plt.title(f"{(noise_level*100):.1f}%", fontsize=28)
+                    title = plt.title(f"{(noise_level*100):.0f}%", fontsize=28)
                     title.set_position([0.5, 1.01])
                     plt.xticks([])
                     plt.yticks([])
@@ -353,7 +353,7 @@ if __name__ == '__main__':
     plt.imshow(merged_noises_plot)
     plt.axis('off')
     # Save the merged plot as a PDF
-    plt.savefig('merged_noises_plot_2000.pdf', bbox_inches='tight', pad_inches=0)
+    plt.savefig('merged_noises_plot_3000.pdf', bbox_inches='tight', pad_inches=0)
 
     plt.close()
 
