@@ -1,23 +1,23 @@
 import os
 import argparse
+import numpy as np
+import matplotlib
 import torch
 import torch.nn as nn
 import torch.optim as optim
 import pandas as pd
-import numpy as np
-import matplotlib
 import matplotlib.pyplot as plt
-from sklearn.datasets import make_moons
+from sklearn.datasets import make_circles
+import itertools
 
 matplotlib.use('agg')
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--adjoint', action='store_true')
 parser.add_argument('--viz', action='store_true')
-parser.add_argument('--niters', type=int, default=1000)
+parser.add_argument('--niters', type=int, default=3000)
 parser.add_argument('--lr', type=float, default=1e-3)
-parser.add_argument('--num_samples', type=int, default=512)
-parser.add_argument('--num_samples_testing', type=int, default=128)
+parser.add_argument('--_num_samples', type=int, default=512)
 parser.add_argument('--width', type=int, default=64)
 parser.add_argument('--hidden_dim', type=int, default=32)
 parser.add_argument('--gpu', type=int, default=0)
@@ -36,12 +36,12 @@ class CNF(nn.Module):
     https://gist.github.com/rtqichen/91924063aa4cc95e7ef30b3a5491cc52
     """
 
-    def __init__(self, in_out_dim, _hidden_dim, _width):
+    def __init__(self, in_out_dim, hidden_dim, width):
         super().__init__()
         self.in_out_dim = in_out_dim
-        self.hidden_dim = _hidden_dim
-        self.width = _width
-        self.hyper_net = HyperNetwork(in_out_dim, _hidden_dim, _width)
+        self.hidden_dim = hidden_dim
+        self.width = width
+        self.hyper_net = HyperNetwork(in_out_dim, hidden_dim, width)
 
     def forward(self, _t, states):
         z = states[0]
@@ -81,18 +81,18 @@ class HyperNetwork(nn.Module):
     https://gist.github.com/rtqichen/91924063aa4cc95e7ef30b3a5491cc52
     """
 
-    def __init__(self, in_out_dim, _hidden_dim, _width):
+    def __init__(self, in_out_dim, hidden_dim, width):
         super().__init__()
 
-        blocksize = _width * in_out_dim
+        blocksize = width * in_out_dim
 
-        self.fc1 = nn.Linear(1, _hidden_dim)
-        self.fc2 = nn.Linear(_hidden_dim, _hidden_dim)
-        self.fc3 = nn.Linear(_hidden_dim, 3 * blocksize + _width)
+        self.fc1 = nn.Linear(1, hidden_dim)
+        self.fc2 = nn.Linear(hidden_dim, hidden_dim)
+        self.fc3 = nn.Linear(hidden_dim, 3 * blocksize + width)
 
         self.in_out_dim = in_out_dim
-        self.hidden_dim = _hidden_dim
-        self.width = _width
+        self.hidden_dim = hidden_dim
+        self.width = width
         self.blocksize = blocksize
 
     def forward(self, _t):
@@ -136,20 +136,12 @@ class RunningAverageMeter(object):
         self.val = val
 
 
-def get_batch(num_samples):
-    _points, _ = make_moons(n_samples=num_samples, noise=0.06)
+def get_batch_circles(_num_samples, _noise_level):
+    _points, _ = make_circles(n_samples=_num_samples, noise=_noise_level, factor=0.5)
     _x = torch.tensor(_points).type(torch.float32).to(device)
-    _logp_diff_t1 = torch.zeros(num_samples, 1).type(torch.float32).to(device)
+    _logp_diff_t1 = torch.zeros(_num_samples, 1).type(torch.float32).to(device)
 
     return _x, _logp_diff_t1
-
-
-def generate_test_samples(num_testing_samples):
-    test_points, _ = make_moons(n_samples=num_testing_samples, noise=0.06)
-    x_test = torch.tensor(test_points).type(torch.float32).to(device)
-    _logp_diff_t1_testing = torch.zeros(num_testing_samples, 1).type(torch.float32).to(device)
-
-    return x_test, _logp_diff_t1_testing
 
 
 if __name__ == '__main__':
@@ -158,39 +150,49 @@ if __name__ == '__main__':
         f'cuda:{str(args.gpu)}' if torch.cuda.is_available() else 'cpu'
     )
 
-    widths = [2, 4, 8, 16, 32, 64, 128, 256]
+    # Define a list of noise levels and sample sizes you want to iterate over
+    noise_levels = [0.1]  # Example noise levels
+    num_samples_list = [64]  # Example sample sizes
+
     repetitions = 1
 
     t0 = 0
     t1 = 10
 
-    sample_plots_width = []  # List to store sample plots
-    log_prob_plots_width = []  # List to store log probability plots
+    plot_samples = []
 
-    for width in widths:
+    # Set random seeds for reproducibility
+    seed = 42
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
+
+    for noise_level, num_samples in itertools.product(noise_levels, num_samples_list):
 
         run_dataframes = []
 
         if args.viz:
             # Create a unique results directory for each run
-            results_dir = f"./resultss_moons_{width}"
+            results_dir = f"./results_samples_itr_{noise_level}_{num_samples}"
             if not os.path.exists(results_dir):
                 os.makedirs(results_dir)
 
         for run in range(repetitions):
-            average_loss_list = []  # Add this line before the training loop
+            print("Noise Level", noise_level)
+            print("Num Samples", num_samples)
+            print("Run", run)
+            average_loss_list = []
             current_loss_list = []
-            test_loss_list = []
 
-            # model
-            func = CNF(in_out_dim=2, _hidden_dim=args.hidden_dim, _width=width).to(device)
+            func = CNF(in_out_dim=2, hidden_dim=args.hidden_dim, width=args.width).to(device)
             optimizer = optim.Adam(func.parameters(), lr=args.lr)
             p_z0 = torch.distributions.MultivariateNormal(
                 loc=torch.tensor([0.0, 0.0]).to(device),
                 covariance_matrix=torch.tensor([[0.1, 0.0], [0.0, 0.1]]).to(device)
             )
             loss_meter = RunningAverageMeter()
-            loss_meter_testing = RunningAverageMeter()
 
             if args.train_dir is not None:
                 if not os.path.exists(args.train_dir):
@@ -203,10 +205,10 @@ if __name__ == '__main__':
                     print(f'Loaded ckpt from {ckpt_path}')
 
             try:
-                for itr in range(1, args.niters + 1):
+                for itr in range(1, 1000 + 1):
                     optimizer.zero_grad()
 
-                    x, logp_diff_t1 = get_batch(args.num_samples)
+                    x, logp_diff_t1 = get_batch_circles(num_samples, noise_level)
 
                     z_t, logp_diff_t = odeint(
                         func,
@@ -244,7 +246,7 @@ if __name__ == '__main__':
             if args.viz and run == repetitions - 1:
                 viz_samples = 30000
                 viz_timesteps = 41
-                target_sample, _ = get_batch(args.num_samples)
+                target_sample, _ = get_batch_circles(viz_samples, noise_level)
 
                 with torch.no_grad():
                     # Generate evolution of samples
@@ -261,8 +263,8 @@ if __name__ == '__main__':
                     )
 
                     # Generate evolution of density
-                    x = np.linspace(-1.5, 2.5, 100)
-                    y = np.linspace(-1.0, 1.5, 100)
+                    x = np.linspace(-1.5, 1.5, 100)
+                    y = np.linspace(-1.5, 1.5, 100)
                     points = np.vstack(np.meshgrid(x, y)).reshape([2, -1]).T
 
                     z_t1 = torch.tensor(points).type(torch.float32).to(device)
@@ -277,69 +279,39 @@ if __name__ == '__main__':
                         method='dopri5',
                     )
 
-                    # TESTING
-                    x_testing, logp_diff_t1_testing = generate_test_samples(args.num_samples_testing)
-
-                    z_t_testing, logp_diff_t_testing = odeint(
-                        func,
-                        (x_testing, logp_diff_t1_testing),
-                        torch.tensor([t1, t0]).type(torch.float32).to(device),
-                        atol=1e-5,
-                        rtol=1e-5,
-                        method='dopri5',
-                    )
-
-                    z_t0_testing, logp_diff_t0_testing = z_t_testing[-1], logp_diff_t_testing[-1]
-
-                    logp_x_testing = p_z0.log_prob(z_t0_testing).to(device) - logp_diff_t0_testing.view(-1)
-                    loss_testing = -logp_x_testing.mean(0)
-
-                    test_loss_list.append(loss_testing.item())
-
                     t = np.linspace(t0, t1, viz_timesteps)[-1]
                     z_sample = z_t_samples[-1]
                     z_density = z_t_density[-1]
                     logp_diff = logp_diff_t[-1]
-                    plt.figure(figsize=(4, 4.5), dpi=200)
-                    plt.tight_layout()
-                    plt.subplots_adjust(left=0.05, right=0.95)  # Minimize left and right margins
-                    plt.axis('off')
-                    plt.margins(0, 0)
-                    plt.title(f"{width}", fontsize=36)
-                    plt.hist2d(*z_sample.detach().cpu().numpy().T, bins=300, density=True,
-                               range=[[-1.5, 2.5], [-1.0, 1.5]])
-
-                    plt.savefig(os.path.join(results_dir, f"sample_width_{width}-{int(t * 1000):05d}.jpg"),
-                                pad_inches=0.0, bbox_inches='tight')
-
-                    sample_plots_width.append(plt.gcf())
-                    plt.close()
 
                     plt.figure(figsize=(4, 4.5), dpi=200)
                     plt.tight_layout()
                     plt.subplots_adjust(left=0.05, right=0.95)  # Minimize left and right margins
                     plt.axis('off')
                     plt.margins(0, 0)
-                    plt.title(f"{width}", fontsize=36)
+                    title = plt.title("1000", fontsize=28)
+                    title.set_position([0.5, 1.01])
+                    plt.xticks([])
+                    plt.yticks([])
                     logp = p_z0.log_prob(z_density) - logp_diff.view(-1)
                     plt.tricontourf(*z_t1.detach().cpu().numpy().T,
                                     np.exp(logp.detach().cpu().numpy()), 200)
 
-                    plt.savefig(os.path.join(results_dir, f"log_width_{width}-{int(t * 1000):05d}.jpg"),
-                                pad_inches=0.0, bbox_inches='tight')
-                    log_prob_plots_width.append(plt.gcf())
+                    plt.savefig(
+                        os.path.join(results_dir, f"noise_levels_{noise_level}-{int(t * 1000):05d}.jpg"),
+                        pad_inches=0.0, bbox_inches='tight')
+
+                    plot_samples.append(plt.gcf())
                     plt.close()
 
-            run_loss_df = pd.DataFrame(
-                {'Average Loss': average_loss_list, 'Current Loss': current_loss_list,
-                 'Test Loss': [test_loss_list[0] if test_loss_list else 0] * len(average_loss_list)})
+            run_loss_df = pd.DataFrame({'Average Loss': average_loss_list, 'Current Loss': current_loss_list})
             run_dataframes.append(run_loss_df)  # Store the DataFrame for this run
 
         # Calculate the average across runs and create a new DataFrame for it
         average_loss_df = pd.concat(run_dataframes).groupby(level=0).mean()
 
         # Create a Pandas Excel writer using XlsxWriter engine
-        with pd.ExcelWriter(os.path.join(results_dir, f'loss_data_{width}.xlsx'),
+        with pd.ExcelWriter(os.path.join(results_dir, f'loss_data_{noise_level}_{num_samples}.xlsx'),
                             engine='xlsxwriter') as excel_writer:
             # Save each run DataFrame to a separate sheet
             for idx, run_df in enumerate(run_dataframes):
@@ -348,35 +320,35 @@ if __name__ == '__main__':
             average_loss_df.to_excel(excel_writer, sheet_name='Average', index=False)
 
         print(
-            f'Saved loss values at {os.path.join(results_dir, f"loss_data_{width}.xlsx")}'
+            f'Saved loss values at {os.path.join(results_dir, f"loss_data_{noise_level}_{num_samples}.xlsx")}'
         )
 
-    hidden_dims = [2, 4, 8, 16, 32, 64, 128, 256]
-    repetitions = 1
+    # Set random seeds for reproducibility
+    seed = 42
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
 
-    t0 = 0
-    t1 = 10
-
-    sample_plots_hidden = []
-    log_prob_plots_hidden = []
-
-    for hidden_dim in hidden_dims:
+    for noise_level, num_samples in itertools.product(noise_levels, num_samples_list):
 
         run_dataframes = []
 
         if args.viz:
             # Create a unique results directory for each run
-            results_dir = f"./resultss_moons_hidden_{hidden_dim}"
+            results_dir = f"./results_samples_itr_{noise_level}_{num_samples}"
             if not os.path.exists(results_dir):
                 os.makedirs(results_dir)
 
         for run in range(repetitions):
-            average_loss_list = []  # Add this line before the training loop
+            print("Noise Level", noise_level)
+            print("Num Samples", num_samples)
+            print("Run", run)
+            average_loss_list = []
             current_loss_list = []
-            test_loss_list = []
 
-            # model
-            func = CNF(in_out_dim=2, _hidden_dim=hidden_dim, _width=args.width).to(device)
+            func = CNF(in_out_dim=2, hidden_dim=args.hidden_dim, width=args.width).to(device)
             optimizer = optim.Adam(func.parameters(), lr=args.lr)
             p_z0 = torch.distributions.MultivariateNormal(
                 loc=torch.tensor([0.0, 0.0]).to(device),
@@ -395,10 +367,10 @@ if __name__ == '__main__':
                     print(f'Loaded ckpt from {ckpt_path}')
 
             try:
-                for itr in range(1, args.niters + 1):
+                for itr in range(1, 2000 + 1):
                     optimizer.zero_grad()
 
-                    x, logp_diff_t1 = get_batch(args.num_samples)
+                    x, logp_diff_t1 = get_batch_circles(num_samples, noise_level)
 
                     z_t, logp_diff_t = odeint(
                         func,
@@ -436,7 +408,7 @@ if __name__ == '__main__':
             if args.viz and run == repetitions - 1:
                 viz_samples = 30000
                 viz_timesteps = 41
-                target_sample, _ = get_batch(args.num_samples)
+                target_sample, _ = get_batch_circles(viz_samples, noise_level)
 
                 with torch.no_grad():
                     # Generate evolution of samples
@@ -453,8 +425,8 @@ if __name__ == '__main__':
                     )
 
                     # Generate evolution of density
-                    x = np.linspace(-1.5, 2.5, 100)
-                    y = np.linspace(-1.0, 1.5, 100)
+                    x = np.linspace(-1.5, 1.5, 100)
+                    y = np.linspace(-1.5, 1.5, 100)
                     points = np.vstack(np.meshgrid(x, y)).reshape([2, -1]).T
 
                     z_t1 = torch.tensor(points).type(torch.float32).to(device)
@@ -469,69 +441,39 @@ if __name__ == '__main__':
                         method='dopri5',
                     )
 
-                    # TESTING
-                    # TESTING
-                    x_testing, logp_diff_t1_testing = generate_test_samples(args.num_samples_testing)
-
-                    z_t_testing, logp_diff_t_testing = odeint(
-                        func,
-                        (x_testing, logp_diff_t1_testing),
-                        torch.tensor([t1, t0]).type(torch.float32).to(device),
-                        atol=1e-5,
-                        rtol=1e-5,
-                        method='dopri5',
-                    )
-
-                    z_t0_testing, logp_diff_t0_testing = z_t_testing[-1], logp_diff_t_testing[-1]
-
-                    logp_x_testing = p_z0.log_prob(z_t0_testing).to(device) - logp_diff_t0_testing.view(-1)
-                    loss_testing = -logp_x_testing.mean(0)
-
-                    test_loss_list.append(loss_testing.item())
-
                     t = np.linspace(t0, t1, viz_timesteps)[-1]
                     z_sample = z_t_samples[-1]
                     z_density = z_t_density[-1]
                     logp_diff = logp_diff_t[-1]
-                    plt.figure(figsize=(4, 4.5), dpi=200)
-                    plt.tight_layout()
-                    plt.subplots_adjust(left=0.05, right=0.95)  # Minimize left and right margins
-                    plt.axis('off')
-                    plt.margins(0, 0)
-                    plt.title(f"{hidden_dim}", fontsize=36)
-                    plt.hist2d(*z_sample.detach().cpu().numpy().T, bins=300, density=True,
-                               range=[[-1.5, 2.5], [-1.0, 1.5]])
-
-                    plt.savefig(os.path.join(results_dir, f"sample_hidden_{hidden_dim}-{int(t * 1000):05d}.jpg"),
-                                pad_inches=0.0, bbox_inches='tight')
-                    sample_plots_hidden.append(plt.gcf())
-                    plt.close()
 
                     plt.figure(figsize=(4, 4.5), dpi=200)
                     plt.tight_layout()
                     plt.subplots_adjust(left=0.05, right=0.95)  # Minimize left and right margins
                     plt.axis('off')
                     plt.margins(0, 0)
-                    plt.title(f"{hidden_dim}", fontsize=36)
+                    title = plt.title("2000", fontsize=28)
+                    title.set_position([0.5, 1.01])
+                    plt.xticks([])
+                    plt.yticks([])
                     logp = p_z0.log_prob(z_density) - logp_diff.view(-1)
                     plt.tricontourf(*z_t1.detach().cpu().numpy().T,
                                     np.exp(logp.detach().cpu().numpy()), 200)
 
-                    plt.savefig(os.path.join(results_dir, f"log_hidden_{hidden_dim}-{int(t * 1000):05d}.jpg"),
-                                pad_inches=0.0, bbox_inches='tight')
-                    log_prob_plots_hidden.append(plt.gcf())
+                    plt.savefig(
+                        os.path.join(results_dir, f"noise_levels_{noise_level}-{int(t * 1000):05d}.jpg"),
+                        pad_inches=0.0, bbox_inches='tight')
+
+                    plot_samples.append(plt.gcf())
                     plt.close()
 
-            run_loss_df = pd.DataFrame(
-                {'Average Loss': average_loss_list, 'Current Loss': current_loss_list,
-                 'Test Loss': [test_loss_list[0] if test_loss_list else 0] * len(average_loss_list)})
+            run_loss_df = pd.DataFrame({'Average Loss': average_loss_list, 'Current Loss': current_loss_list})
             run_dataframes.append(run_loss_df)  # Store the DataFrame for this run
 
         # Calculate the average across runs and create a new DataFrame for it
         average_loss_df = pd.concat(run_dataframes).groupby(level=0).mean()
 
         # Create a Pandas Excel writer using XlsxWriter engine
-        with pd.ExcelWriter(os.path.join(results_dir, f'loss_data_hid_{hidden_dim}.xlsx'),
+        with pd.ExcelWriter(os.path.join(results_dir, f'loss_data_{noise_level}_{num_samples}.xlsx'),
                             engine='xlsxwriter') as excel_writer:
             # Save each run DataFrame to a separate sheet
             for idx, run_df in enumerate(run_dataframes):
@@ -540,49 +482,181 @@ if __name__ == '__main__':
             average_loss_df.to_excel(excel_writer, sheet_name='Average', index=False)
 
         print(
-            f'Saved loss values at {os.path.join(results_dir, f"loss_data_hid_{hidden_dim}.xlsx")}'
+            f'Saved loss values at {os.path.join(results_dir, f"loss_data_{noise_level}_{num_samples}.xlsx")}'
         )
-    merged_sample_width_plot = np.hstack([np.array(plot.canvas.renderer.buffer_rgba()) for plot in sample_plots_width])
+
+    # Set random seeds for reproducibility
+    seed = 42
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
+
+    for noise_level, num_samples in itertools.product(noise_levels, num_samples_list):
+
+        run_dataframes = []
+
+        if args.viz:
+            # Create a unique results directory for each run
+            results_dir = f"./results_samples_itr_{noise_level}_{num_samples}"
+            if not os.path.exists(results_dir):
+                os.makedirs(results_dir)
+
+        for run in range(repetitions):
+            print("Noise Level", noise_level)
+            print("Num Samples", num_samples)
+            print("Run", run)
+            average_loss_list = []
+            current_loss_list = []
+
+            func = CNF(in_out_dim=2, hidden_dim=args.hidden_dim, width=args.width).to(device)
+            optimizer = optim.Adam(func.parameters(), lr=args.lr)
+            p_z0 = torch.distributions.MultivariateNormal(
+                loc=torch.tensor([0.0, 0.0]).to(device),
+                covariance_matrix=torch.tensor([[0.1, 0.0], [0.0, 0.1]]).to(device)
+            )
+            loss_meter = RunningAverageMeter()
+
+            if args.train_dir is not None:
+                if not os.path.exists(args.train_dir):
+                    os.makedirs(args.train_dir)
+                ckpt_path = os.path.join(args.train_dir, 'ckpt.pth')
+                if os.path.exists(ckpt_path):
+                    checkpoint = torch.load(ckpt_path)
+                    func.load_state_dict(checkpoint['func_state_dict'])
+                    optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+                    print(f'Loaded ckpt from {ckpt_path}')
+
+            try:
+                for itr in range(1, 3000 + 1):
+                    optimizer.zero_grad()
+
+                    x, logp_diff_t1 = get_batch_circles(num_samples, noise_level)
+
+                    z_t, logp_diff_t = odeint(
+                        func,
+                        (x, logp_diff_t1),
+                        torch.tensor([t1, t0]).type(torch.float32).to(device),
+                        atol=1e-5,
+                        rtol=1e-5,
+                        method='dopri5',
+                    )
+
+                    z_t0, logp_diff_t0 = z_t[-1], logp_diff_t[-1]
+
+                    logp_x = p_z0.log_prob(z_t0).to(device) - logp_diff_t0.view(-1)
+                    loss = -logp_x.mean(0)
+
+                    loss.backward()
+                    optimizer.step()
+
+                    loss_meter.update(loss.item())
+                    average_loss_list.append(loss_meter.avg)  # Add this line to store the loss value
+                    current_loss_list.append(loss.item())
+
+                    print('Iter: {}, running avg loss: {:.4f}'.format(itr, loss_meter.avg))
+
+            except KeyboardInterrupt:
+                if args.train_dir is not None:
+                    ckpt_path = os.path.join(args.train_dir, 'ckpt.pth')
+                    torch.save({
+                        'func_state_dict': func.state_dict(),
+                        'optimizer_state_dict': optimizer.state_dict(),
+                    }, ckpt_path)
+                    print(f'Stored ckpt at {ckpt_path}')
+            print(f'Training complete after {itr} iters.')
+
+            if args.viz and run == repetitions - 1:
+                viz_samples = 30000
+                viz_timesteps = 41
+                target_sample, _ = get_batch_circles(viz_samples, noise_level)
+
+                with torch.no_grad():
+                    # Generate evolution of samples
+                    z_t0 = p_z0.sample([viz_samples]).to(device)
+                    logp_diff_t0 = torch.zeros(viz_samples, 1).type(torch.float32).to(device)
+
+                    z_t_samples, _ = odeint(
+                        func,
+                        (z_t0, logp_diff_t0),
+                        torch.tensor(np.linspace(t0, t1, viz_timesteps)).to(device),
+                        atol=1e-5,
+                        rtol=1e-5,
+                        method='dopri5',
+                    )
+
+                    # Generate evolution of density
+                    x = np.linspace(-1.5, 1.5, 100)
+                    y = np.linspace(-1.5, 1.5, 100)
+                    points = np.vstack(np.meshgrid(x, y)).reshape([2, -1]).T
+
+                    z_t1 = torch.tensor(points).type(torch.float32).to(device)
+                    logp_diff_t1 = torch.zeros(z_t1.shape[0], 1).type(torch.float32).to(device)
+
+                    z_t_density, logp_diff_t = odeint(
+                        func,
+                        (z_t1, logp_diff_t1),
+                        torch.tensor(np.linspace(t1, t0, viz_timesteps)).to(device),
+                        atol=1e-5,
+                        rtol=1e-5,
+                        method='dopri5',
+                    )
+
+                    t = np.linspace(t0, t1, viz_timesteps)[-1]
+                    z_sample = z_t_samples[-1]
+                    z_density = z_t_density[-1]
+                    logp_diff = logp_diff_t[-1]
+
+                    plt.figure(figsize=(4, 4.5), dpi=200)
+                    plt.tight_layout()
+                    plt.subplots_adjust(left=0.05, right=0.95)  # Minimize left and right margins
+                    plt.axis('off')
+                    plt.margins(0, 0)
+                    title = plt.title("3000", fontsize=28)
+                    title.set_position([0.5, 1.01])
+                    plt.xticks([])
+                    plt.yticks([])
+                    logp = p_z0.log_prob(z_density) - logp_diff.view(-1)
+                    plt.tricontourf(*z_t1.detach().cpu().numpy().T,
+                                    np.exp(logp.detach().cpu().numpy()), 200)
+
+                    plt.savefig(
+                        os.path.join(results_dir, f"samples_{noise_level}-{int(t * 1000):05d}.jpg"),
+                        pad_inches=0.0, bbox_inches='tight')
+
+                    plot_samples.append(plt.gcf())
+                    plt.close()
+
+            run_loss_df = pd.DataFrame({'Average Loss': average_loss_list, 'Current Loss': current_loss_list})
+            run_dataframes.append(run_loss_df)  # Store the DataFrame for this run
+
+        # Calculate the average across runs and create a new DataFrame for it
+        average_loss_df = pd.concat(run_dataframes).groupby(level=0).mean()
+
+        # Create a Pandas Excel writer using XlsxWriter engine
+        with pd.ExcelWriter(os.path.join(results_dir, f'loss_data_{noise_level}_{num_samples}.xlsx'),
+                            engine='xlsxwriter') as excel_writer:
+            # Save each run DataFrame to a separate sheet
+            for idx, run_df in enumerate(run_dataframes):
+                run_df.to_excel(excel_writer, sheet_name=f'Run{idx + 1}', index=False)
+
+            average_loss_df.to_excel(excel_writer, sheet_name='Average', index=False)
+
+        print(
+            f'Saved loss values at {os.path.join(results_dir, f"loss_data_{noise_level}_{num_samples}.xlsx")}'
+        )
+
+    print(len(plot_samples))
+
+    merged_samples_plot = np.hstack(
+        [np.array(plot.canvas.renderer.buffer_rgba()) for plot in plot_samples])
 
     # Create a new figure for saving the merged plot
-    plt.figure(figsize=(32, 8))
-    plt.imshow(merged_sample_width_plot)
+    plt.figure(figsize=(12, 4.5))
+    plt.imshow(merged_samples_plot)
     plt.axis('off')
     # Save the merged plot as a PDF
-    plt.savefig('merged_sample_width_plot_f.pdf', bbox_inches='tight', pad_inches=0)
-
-    plt.close()
-
-    merged_log_width_plot = np.hstack([np.array(plot.canvas.renderer.buffer_rgba()) for plot in log_prob_plots_width])
-
-    # Create a new figure for saving the merged plot
-    plt.figure(figsize=(32, 8))
-    plt.imshow(merged_log_width_plot)
-    plt.axis('off')
-    # Save the merged plot as a PDF
-    plt.savefig('merged_log_width_plot_f.pdf', bbox_inches='tight', pad_inches=0)
-
-    plt.close()
-
-    merged_sample_hidden_plot = np.hstack(
-        [np.array(plot.canvas.renderer.buffer_rgba()) for plot in sample_plots_hidden])
-
-    # Create a new figure for saving the merged plot
-    plt.figure(figsize=(32, 8))
-    plt.imshow(merged_sample_hidden_plot)
-    plt.axis('off')
-    # Save the merged plot as a PDF
-    plt.savefig('merged_sample_hidden_plot_f.pdf', bbox_inches='tight', pad_inches=0)
-
-    plt.close()
-
-    merged_log_hidden_plot = np.hstack([np.array(plot.canvas.renderer.buffer_rgba()) for plot in log_prob_plots_hidden])
-
-    # Create a new figure for saving the merged plot
-    plt.figure(figsize=(32, 8))
-    plt.imshow(merged_log_hidden_plot)
-    plt.axis('off')
-    # Save the merged plot as a PDF
-    plt.savefig('merged_log_hidden_plot_f.pdf', bbox_inches='tight', pad_inches=0)
+    plt.savefig('merged_samples_1_2_3.pdf', bbox_inches='tight', pad_inches=0)
 
     plt.close()
