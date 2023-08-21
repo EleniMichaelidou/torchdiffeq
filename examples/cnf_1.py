@@ -159,7 +159,7 @@ if __name__ == '__main__':
     )
 
     widths = [2, 4, 8, 16, 32, 64, 128, 256]
-    repetitions = 10
+    repetitions = 1
 
     t0 = 0
     t1 = 10
@@ -173,7 +173,7 @@ if __name__ == '__main__':
 
         if args.viz:
             # Create a unique results directory for each run
-            results_dir = f"./results_moons_{width}"
+            results_dir = f"./resultss_moons_{width}"
             if not os.path.exists(results_dir):
                 os.makedirs(results_dir)
 
@@ -300,7 +300,7 @@ if __name__ == '__main__':
                     z_sample = z_t_samples[-1]
                     z_density = z_t_density[-1]
                     logp_diff = logp_diff_t[-1]
-                    plt.figure(figsize=(4, 4), dpi=200)
+                    plt.figure(figsize=(4, 4.5), dpi=200)
                     plt.tight_layout()
                     plt.subplots_adjust(left=0.05, right=0.95)  # Minimize left and right margins
                     plt.axis('off')
@@ -315,7 +315,7 @@ if __name__ == '__main__':
                     sample_plots_width.append(plt.gcf())
                     plt.close()
 
-                    plt.figure(figsize=(4, 4), dpi=200)
+                    plt.figure(figsize=(4, 4.5), dpi=200)
                     plt.tight_layout()
                     plt.subplots_adjust(left=0.05, right=0.95)  # Minimize left and right margins
                     plt.axis('off')
@@ -352,7 +352,7 @@ if __name__ == '__main__':
         )
 
     hidden_dims = [2, 4, 8, 16, 32, 64, 128, 256]
-    repetitions = 10
+    repetitions = 1
 
     t0 = 0
     t1 = 10
@@ -366,7 +366,7 @@ if __name__ == '__main__':
 
         if args.viz:
             # Create a unique results directory for each run
-            results_dir = f"./results_moons_hidden_{hidden_dim}"
+            results_dir = f"./resultss_moons_hidden_{hidden_dim}"
             if not os.path.exists(results_dir):
                 os.makedirs(results_dir)
 
@@ -493,7 +493,7 @@ if __name__ == '__main__':
                     z_sample = z_t_samples[-1]
                     z_density = z_t_density[-1]
                     logp_diff = logp_diff_t[-1]
-                    plt.figure(figsize=(4, 4), dpi=200)
+                    plt.figure(figsize=(4, 4.5), dpi=200)
                     plt.tight_layout()
                     plt.subplots_adjust(left=0.05, right=0.95)  # Minimize left and right margins
                     plt.axis('off')
@@ -507,7 +507,7 @@ if __name__ == '__main__':
                     sample_plots_hidden.append(plt.gcf())
                     plt.close()
 
-                    plt.figure(figsize=(4, 4), dpi=200)
+                    plt.figure(figsize=(4, 4.5), dpi=200)
                     plt.tight_layout()
                     plt.subplots_adjust(left=0.05, right=0.95)  # Minimize left and right margins
                     plt.axis('off')
@@ -549,7 +549,7 @@ if __name__ == '__main__':
     plt.imshow(merged_sample_width_plot)
     plt.axis('off')
     # Save the merged plot as a PDF
-    plt.savefig('merged_sample_width_plot.pdf', bbox_inches='tight', pad_inches=0)
+    plt.savefig('merged_sample_width_plot_f.pdf', bbox_inches='tight', pad_inches=0)
 
     plt.close()
 
@@ -560,7 +560,7 @@ if __name__ == '__main__':
     plt.imshow(merged_log_width_plot)
     plt.axis('off')
     # Save the merged plot as a PDF
-    plt.savefig('merged_log_width_plot.pdf', bbox_inches='tight', pad_inches=0)
+    plt.savefig('merged_log_width_plot_f.pdf', bbox_inches='tight', pad_inches=0)
 
     plt.close()
 
@@ -572,7 +572,7 @@ if __name__ == '__main__':
     plt.imshow(merged_sample_hidden_plot)
     plt.axis('off')
     # Save the merged plot as a PDF
-    plt.savefig('merged_sample_hidden_plot.pdf', bbox_inches='tight', pad_inches=0)
+    plt.savefig('merged_sample_hidden_plot_f.pdf', bbox_inches='tight', pad_inches=0)
 
     plt.close()
 
@@ -583,6 +583,6 @@ if __name__ == '__main__':
     plt.imshow(merged_log_hidden_plot)
     plt.axis('off')
     # Save the merged plot as a PDF
-    plt.savefig('merged_log_hidden_plot.pdf', bbox_inches='tight', pad_inches=0)
+    plt.savefig('merged_log_hidden_plot_f.pdf', bbox_inches='tight', pad_inches=0)
 
     plt.close()
