@@ -15,7 +15,7 @@ parser.add_argument('--network', type=str, choices=['resnet', 'odenet'], default
 parser.add_argument('--tol', type=float, default=1e-3)
 parser.add_argument('--adjoint', type=eval, default=False, choices=[True, False])
 parser.add_argument('--downsampling-method', type=str, default='conv', choices=['conv', 'res'])
-parser.add_argument('--nepochs', type=int, default=150)
+parser.add_argument('--nepochs', type=int, default=160)
 parser.add_argument('--data_aug', type=eval, default=True, choices=[True, False])
 parser.add_argument('--lr', type=float, default=0.1)
 parser.add_argument('--batch_size', type=int, default=128)
@@ -366,9 +366,9 @@ if __name__ == '__main__':
     end = time.time()
 
     epoch_data = []
+    print(args.adjoint, args.network, args.batch_size, args.nepochs)
 
     for itr in range(args.nepochs * batches_per_epoch):
-
         for param_group in optimizer.param_groups:
             param_group['lr'] = lr_fn(itr)
 
