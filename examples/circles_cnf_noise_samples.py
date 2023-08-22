@@ -152,7 +152,7 @@ if __name__ == '__main__':
     )
 
     # Define a list of noise levels and sample sizes you want to iterate over
-    noise_levels = [0.05]  # Example noise levels
+    noise_levels = [0.0]  # Example noise levels
     num_samples_list = [64, 128, 256, 512, 1024]  # Example sample sizes
 
     repetitions = 1
@@ -277,7 +277,7 @@ if __name__ == '__main__':
                     z_density = z_t_density[-1]
                     logp_diff = logp_diff_t[-1]
 
-                    plt.figure(figsize=(4, 4), dpi=200)
+                    plt.figure(figsize=(4, 4.5), dpi=200)
                     plt.tight_layout()
                     plt.subplots_adjust(left=0.05, right=0.95)  # Minimize left and right margins
                     plt.axis('off')
@@ -293,7 +293,7 @@ if __name__ == '__main__':
                     plt.close()
 
                     if num_samples == 1024:
-                        plt.figure(figsize=(4, 4), dpi=200)
+                        plt.figure(figsize=(4, 4.5), dpi=200)
                         plt.tight_layout()
                         plt.subplots_adjust(left=0.05, right=0.95)  # Minimize left and right margins
                         plt.axis('off')
@@ -331,7 +331,7 @@ if __name__ == '__main__':
         [np.array(plot.canvas.renderer.buffer_rgba()) for plot in plots_samples])
 
     # Create a new figure for saving the merged plot
-    plt.figure(figsize=(24, 4))
+    plt.figure(figsize=(24, 4.5))
     plt.imshow(merged_dif_samples_plot)
     plt.axis('off')
     # Save the merged plot as a PDF
